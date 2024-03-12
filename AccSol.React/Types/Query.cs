@@ -17,7 +17,7 @@ public class Query
 
 
     [GraphQLDescription("Company clients.")]
-    public async Task<List<GClient>> CompanyClients(AccSolService accSolService)
+    public async Task<List<GClient>> CompanyClients([Service]AccSolService accSolService)
     {
         var response = await accSolService.GetAllAsync();
 
