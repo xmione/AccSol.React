@@ -29,9 +29,9 @@ namespace AccSolWeb
         private System.Net.Http.HttpClient _httpClient;
         private static System.Lazy<Newtonsoft.Json.JsonSerializerSettings> _settings = new System.Lazy<Newtonsoft.Json.JsonSerializerSettings>(CreateSerializerSettings, true);
 
-        public AccSolService(string baseUrl, System.Net.Http.HttpClient httpClient)
+        public AccSolService(System.Net.Http.HttpClient httpClient)
         {
-            BaseUrl = baseUrl;
+            BaseUrl = "https://localhost:7040/";
             _httpClient = httpClient;
         }
 
