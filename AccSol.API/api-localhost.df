@@ -1,0 +1,97 @@
+#==============================================================
+# Base
+#==============================================================
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
+LABEL maintainer="solomiosisante@gmail.com"
+USER root
+# Update package lists
+RUN apt-get update
+# Upgrade packages
+RUN apt-get upgrade -y
+
+# Install necessary packages
+RUN apt-get install -y inetutils-ping curl gnupg openssl
+RUN apt-get install -y telnet
+
+# Install Microsoft GPG key
+RUN curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add -
+
+# Add Microsoft repository
+RUN curl https://packages.microsoft.com/config/debian/10/prod.list > /etc/apt/sources.list.d/mssql-release.list
+
+# Update package lists again
+RUN apt-get update
+
+# Install MSSQL tools and dependencies
+RUN ACCEPT_EULA=Y apt-get install -y mssql-tools unixodbc-dev
+
+WORKDIR /Data
+RUN echo "Copying accsol-api certificates from /Data/ to /usr/local/share/ca-certificates/"
+
+COPY ["AccSol.EF/Data/api.accsol.com.pfx", "/Data"]
+COPY ["AccSol.EF/Data/api.accsol.com.crt", "/Data"]
+COPY ["AccSol.EF/Data/api.accsol.com.key", "/Data"]
+
+RUN cp /Data/api.accsol.com.pfx /usr/local/share/ca-certificates/
+RUN cp /Data/api.accsol.com.crt /usr/local/share/ca-certificates/
+RUN cp /Data/api.accsol.com.key /usr/local/share/ca-certificates/
+
+RUN echo "Updating accsol-api certificates"
+RUN update-ca-certificates
+
+WORKDIR /app
+
+#==============================================================
+# Build
+#==============================================================
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+# Metadata indicating an image maintainer.
+LABEL maintainer="solomiosisante@gmail.com"
+ARG BUILD_CONFIGURATION=Release
+
+WORKDIR /src
+
+COPY ["AccSol.API/AccSol.API.csproj", "AccSol.API/"]
+COPY ["AccSol.EF/AccSol.EF.csproj", "AccSol.EF/"]
+
+RUN dotnet restore "./AccSol.API/./AccSol.API.csproj"
+COPY . .
+WORKDIR "/src/AccSol.API"
+
+RUN dotnet build "./AccSol.API.csproj" -c $BUILD_CONFIGURATION -o /app/build
+
+# Install dotnet-trace
+RUN dotnet tool install --global dotnet-trace
+
+#==============================================================
+# Publish
+#==============================================================
+FROM build AS publish
+ARG BUILD_CONFIGURATION=Release
+RUN dotnet publish "./AccSol.API.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+
+#==============================================================
+# Final
+#==============================================================
+FROM base AS final
+WORKDIR /app
+COPY --from=publish /app/publish .
+
+# Copy the .NET tools from the build image
+COPY --from=build /root/.dotnet/tools /root/.dotnet/tools
+
+ENV ASPNETCORE_ENVIRONMENT=DockerSql
+ENV ASPNETCORE_HTTP_PORTS="5049"
+ENV ASPNETCORE_HTTPS_PORTS="7040"
+ENV ASPNETCORE_Kestrel__Certificates__Default__Password=P@ssw0rd123 
+ENV ASPNETCORE_Kestrel__Certificates__Default__Path=/Data/api.accsol.com.pfx
+ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/mssql-tools/bin:/root/.dotnet/tools
+ENV DOMAIN_NAME=${DOMAIN_NAME:-api.accsol.com}
+
+# Expose the ports your application is listening on
+EXPOSE 5049
+EXPOSE 7040
+
+
+
+ENTRYPOINT ["dotnet", "AccSol.API.dll"]

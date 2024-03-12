@@ -1,0 +1,36 @@
+#See https://aka.ms/customizecontainer to learn how to customize your debug container and how Visual Studio uses this Dockerfile to build your images for faster debugging.
+
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
+USER app
+WORKDIR /app
+EXPOSE 5049
+EXPOSE 7040
+
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+# Metadata indicating an image maintainer.
+LABEL maintainer="solomiosisante@gmail.com"
+ARG BUILD_CONFIGURATION=Release
+
+WORKDIR /src
+COPY ["AccSol.API/AccSol.API.csproj", "AccSol.API/"]
+COPY ["AccSol.EF/AccSol.EF.csproj", "AccSol.EF/"]
+RUN dotnet restore "./AccSol.API/./AccSol.API.csproj"
+COPY . .
+WORKDIR "/src/AccSol.API"
+RUN dotnet build "./AccSol.API.csproj" -c $BUILD_CONFIGURATION -o /app/build
+
+FROM build AS publish
+ARG BUILD_CONFIGURATION=Release
+RUN dotnet publish "./AccSol.API.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+
+FROM base AS final
+WORKDIR /app
+COPY --from=publish /app/publish .
+COPY --from=build /src/AccSol.API/certs /certs
+
+ENV ASPNETCORE_ENVIRONMENT=DockerSql
+ENV ASPNETCORE_URLS=http://+:5049;https://+:7040
+ENV ASPNETCORE_Kestrel__Certificates__Default__Password=P@ssw0rd123
+ENV ASPNETCORE_Kestrel__Certificates__Default__Path=/certs/AccSol.pfx
+
+ENTRYPOINT ["dotnet", "AccSol.API.dll"]
