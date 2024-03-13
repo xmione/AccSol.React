@@ -6,16 +6,24 @@ using AccSolWeb;
 using SpotifyWeb;
 
 var builder = WebApplication.CreateBuilder(args);
-
+ 
 var _baseAPIUrl = builder.Configuration.GetSection("APIBaseURL").Value ?? string.Empty;
 
-builder.Services.AddHttpClient<AccSolService>().ConfigureHttpClient((sp, client) =>
+builder.Services.AddHttpClient<AccSolService>((sp, client) =>
 {
-    client.BaseAddress = new Uri("https://localhost:7040/");
+    client.BaseAddress = new Uri(_baseAPIUrl);
 });
 
+// Register AccSolService with baseUrl parameter
+builder.Services.AddTransient<AccSolService>(sp =>
+{
+    var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+    var httpClient = httpClientFactory.CreateClient();
+    return new AccSolService(_baseAPIUrl, httpClient);
+});
+
+
 builder.Services.AddHttpClient<SpotifyService>();
-builder.Services.AddHttpClient<AccSolService>();
 builder.Services
     .AddGraphQLServer()
     .AddQueryType<Query>()
